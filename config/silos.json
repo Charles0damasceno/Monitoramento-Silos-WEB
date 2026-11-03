@@ -1,0 +1,26 @@
+{
+  "$comentario": "Cadastro dos silos. 'coluna' é o nome da coluna na tabela do MySQL da IHM. Limites em % da capacidade.",
+  "silos": [
+    {
+      "id": 1,
+      "nome": "Silo 1",
+      "coluna": "Silo1",
+      "capacidadeLitros": 100000,
+      "limites": { "muitoBaixo": 5, "baixo": 10, "alto": 90, "muitoAlto": 95 }
+    },
+    {
+      "id": 2,
+      "nome": "Silo 2",
+      "coluna": "Silo2",
+      "capacidadeLitros": 100000,
+      "limites": { "muitoBaixo": 5, "baixo": 10, "alto": 90, "muitoAlto": 95 }
+    },
+    {
+      "id": 3,
+      "nome": "Silo 3",
+      "coluna": "Silo3",
+      "capacidadeLitros": 100000,
+      "limites": { "muitoBaixo": 5, "baixo": 10, "alto": 90, "muitoAlto": 95 }
+    }
+  ]
+}
