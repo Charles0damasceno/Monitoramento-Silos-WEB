@@ -7,6 +7,7 @@ const dataHora = new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-di
 export const litros = (v) => (v === null || v === undefined ? '—' : `${numero.format(v)} L`);
 export const num = (v) => (v === null || v === undefined ? '—' : numero.format(v));
 export const pct = (v) => (v === null || v === undefined ? '—' : `${decimal.format(v)}%`);
+export const celsius = (v) => (v === null || v === undefined || !Number.isFinite(v) ? '—' : `${decimal.format(v)} °C`);
 export const fmtHora = (ts) => hora.format(ts);
 export const fmtHoraSeg = (ts) => horaSeg.format(ts);
 export const fmtDataHora = (ts) => dataHora.format(ts);

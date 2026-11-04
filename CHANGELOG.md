@@ -1,5 +1,38 @@
 # Changelog
 
+## 2.3.0 — 2026-11-03
+
+### Novo
+- **Tela de Configurações** (somente administradores): silos (cadastro aplicado na hora, sem reiniciar, com cópia da versão anterior), usuários (criar, editar, trocar senha, remover, com travas do último admin e do próprio usuário), alertas (status e teste do Telegram), sistema (parâmetros e backup manual) e auditoria.
+- **Auditoria:** registra logins, senhas incorretas, alterações de silos e usuários, testes do Telegram, backups manuais e reconhecimento de alarmes, com usuário e IP.
+- `npm run dev` sobe a API e o site juntos; `.claude/launch.json` com a configuração "painel".
+- O cadastro recusa dois silos usando a mesma coluna e a reutilização do id de um silo removido que tem histórico.
+
+## 2.2.0 — 2026-11-03
+
+### Novo
+- **Alertas no Telegram:** alarmes críticos e falta de comunicação chegam num grupo, com botão "Reconhecer", lembrete enquanto ninguém reconhece, aviso de normalização e comando `/status`. Fila de reenvio quando falta internet. Configuração com `npm run telegram -- descobrir | testar`.
+- **Temperatura dos silos** (tabela `temperatura_silo`): valor no cartão, alarme crítico acima de `maxC` com histerese de 0,5 °C, histórico e gráfico de temperatura; leitura velha aparece como desatualizada.
+- **Anomalias:** "leitura suspeita" (salto impossível entre leituras) e "níveis congelados" (IHM pode ter parado de gravar).
+- **Relatórios** por turno/dia: início, fim, mín./máx., entrada e saída estimadas, temperatura, alarmes, cobertura dos dados; exportação para Excel (CSV) e impressão/PDF.
+- **Painel da fábrica:** ultrafiltração 1/2, queijomáticas e recepção de leite, sempre com a idade de cada dado e diagnóstico da qualidade da gravação.
+- **Backup diário** do histórico e dos usuários (`VACUUM INTO`), com retenção e pasta de rede opcional.
+- Navegação por abas (Silos · Relatórios · Fábrica) com endereço próprio (`#/relatorios`).
+- **Identidade visual HE Laticínios + Althium Ingredients:** logos no cabeçalho (versão branca no tema escuro), na tela de login (com as ondas verde/vinho) e no relatório impresso; verde HE `#00782c` como cor principal e vinho Althium `#a40044` como destaque. Os alarmes continuam em âmbar e vermelho-alaranjado, distintos do vinho. Tema claro passa a ser o padrão.
+- **Tela adaptável do celular à TV 4K:** fonte base fluida (14 px no celular até ~25 px em 4K), cartões em 1/2/3 colunas conforme a largura, tanque e números proporcionais à tela, cabeçalho e abas que se reorganizam no celular, sem rolagem lateral. Ícones para instalar o painel na tela inicial do celular/tablet.
+- Documentação de monitoramento externo (`/api/saude`) e acesso remoto por VPN.
+
+## 2.1.0 — 2026-11-03
+
+### Novo
+- **Leitura independente por silo:** uma coluna inexistente ou com valor inválido deixa só aquele silo como "Sem leitura"; antes, derrubava a leitura de todos.
+- **Detecção de silo novo:** o painel relê a estrutura da tabela a cada 5 min e avisa (faixa para admins + evento) quando há coluna numérica no banco que não está em `config/silos.json`.
+- `ARQUIVO_SILOS` no `.env` permite apontar outro arquivo de cadastro (útil para testes).
+
+### Correções
+- O resumo geral somava a capacidade de silos sem leitura no "espaço livre".
+- Com a porta ocupada, o log mostrava "Painel de silos em …" antes do erro (o callback do `listen` do Express 5 também é chamado em erro).
+
 ## 2.0.0 — 2026-11-03
 
 Reescrita completa, mantendo a mesma fonte de dados (tabela `silo` da IHM no MySQL).

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Alert, Box, Button, Paper, Stack, TextField, Typography } from '@mui/material';
 import { api } from '../api';
+import { Logos, OndasMarca } from './Marca';
 
 export default function TelaLogin({ aoEntrar }) {
   const [usuario, setUsuario] = useState('');
@@ -24,13 +25,27 @@ export default function TelaLogin({ aoEntrar }) {
   };
 
   return (
-    <Box sx={{ minHeight: '100vh', display: 'grid', placeItems: 'center', p: 2 }}>
-      <Paper component="form" onSubmit={enviar} sx={{ p: { xs: 3, sm: 4 }, width: '100%', maxWidth: 380 }}>
-        <Stack spacing={2.5}>
-          <Stack direction="row" spacing={1.5} alignItems="center">
-            <Box component="img" src="/favicon.svg" alt="" sx={{ width: 40, height: 40 }} />
-            <Box>
-              <Typography variant="h1">Painel de Silos</Typography>
+    <Box sx={{ minHeight: '100dvh', display: 'grid', placeItems: 'center', p: 2, position: 'relative', overflow: 'hidden' }}>
+      <OndasMarca />
+      <Paper
+        component="form"
+        onSubmit={enviar}
+        sx={{
+          position: 'relative',
+          zIndex: 1,
+          p: { xs: 3, sm: 5 },
+          width: '100%',
+          maxWidth: 440,
+          borderRadius: 4,
+          backdropFilter: 'blur(6px)',
+          boxShadow: '0 20px 60px rgba(20, 40, 25, 0.18)',
+        }}
+      >
+        <Stack spacing={3}>
+          <Stack alignItems="center" spacing={2.5} sx={{ pt: 1 }}>
+            <Logos altura={{ xs: 56, sm: 74 }} separador={false} />
+            <Box textAlign="center">
+              <Typography variant="h1" sx={{ fontSize: '1.35rem' }}>Painel de Silos</Typography>
               <Typography variant="body2" color="text.secondary">Acesso restrito</Typography>
             </Box>
           </Stack>
@@ -40,6 +55,7 @@ export default function TelaLogin({ aoEntrar }) {
             value={usuario}
             onChange={(e) => setUsuario(e.target.value)}
             autoComplete="username"
+            autoCapitalize="none"
             autoFocus
             required
             fullWidth
@@ -53,7 +69,7 @@ export default function TelaLogin({ aoEntrar }) {
             required
             fullWidth
           />
-          <Button type="submit" variant="contained" size="large" disabled={enviando || !usuario || !senha}>
+          <Button type="submit" variant="contained" size="large" disabled={enviando || !usuario || !senha} sx={{ py: 1.4 }}>
             {enviando ? 'Entrando…' : 'Entrar'}
           </Button>
         </Stack>

@@ -52,6 +52,18 @@ function criarCadastro(arquivo) {
       usuarios.push({ usuario, nome: nome || usuario, papel, senha: gerarHash(senha) });
       gravar(usuarios);
     },
+    /** Altera nome/papel e, se informada, a senha. */
+    atualizar(usuario, { nome, papel, senha }) {
+      const usuarios = ler();
+      const u = usuarios.find((x) => x.usuario === usuario);
+      if (!u) throw new Error(`usuário "${usuario}" não existe`);
+      if (papel !== undefined && !['admin', 'operador'].includes(papel)) throw new Error('papel deve ser admin ou operador');
+      if (senha !== undefined && (typeof senha !== 'string' || senha.length < 8)) throw new Error('senha deve ter ao menos 8 caracteres');
+      if (nome !== undefined) u.nome = String(nome).trim() || u.usuario;
+      if (papel !== undefined) u.papel = papel;
+      if (senha !== undefined) u.senha = gerarHash(senha);
+      gravar(usuarios);
+    },
     remover(usuario) {
       const usuarios = ler();
       const resto = usuarios.filter((u) => u.usuario !== usuario);

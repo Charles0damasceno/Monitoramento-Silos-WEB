@@ -29,10 +29,10 @@ export default function Tanque({ percentual, limites, severidade, desatualizado,
   return (
     <svg
       viewBox={`0 0 ${L} ${A}`}
-      height={altura}
       role="img"
       aria-label={`Nível ${percentual === null ? 'desconhecido' : `${nivel.toFixed(1)}%`}`}
-      style={{ display: 'block', overflow: 'visible' }}
+      // `altura` aceita CSS (ex.: clamp()) para o tanque acompanhar o tamanho da tela.
+      style={{ display: 'block', overflow: 'visible', height: altura, width: 'auto', shapeRendering: 'geometricPrecision' }}
     >
       <defs>
         <clipPath id={idRecorte}><path d={formato} /></clipPath>

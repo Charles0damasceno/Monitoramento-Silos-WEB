@@ -1,14 +1,60 @@
 'use strict';
 
-// Origem das leituras. Toda fonte expõe `ler()` → Map(siloId → litros) e `fechar()`.
+// Origem das leituras. Toda fonte expõe `ler()` → { valores, faltando, naoCadastradas } e `fechar()`:
+//   valores        Map(siloId → litros) dos silos lidos com sucesso
+//   faltando       Map(siloId → motivo) dos silos sem leitura ('coluna_inexistente' | 'valor_invalido')
+//   naoCadastradas nomes de colunas numéricas do banco que nenhum silo usa (silo novo na IHM?)
+// Um silo com problema não derruba os outros; só falha de conexão faz `ler()` lançar erro.
 
 const mysql = require('mysql2/promise');
 
+const REDESCOBRIR_MS = 5 * 60_000;
+const TIPO_NUMERICO = /^(tinyint|smallint|mediumint|int|integer|bigint|decimal|numeric|float|double|real)\b/i;
+
+/**
+ * Decide o que consultar a partir das colunas que existem de fato na tabela.
+ * Nomes de coluna no MySQL não diferenciam maiúsculas, então a comparação também não.
+ */
+function planejarConsulta(colunasBanco, silos) {
+  const porNome = new Map(colunasBanco.map((c) => [c.Field.toLowerCase(), c]));
+  const usadas = new Set(silos.map((s) => s.coluna.toLowerCase()));
+  const chave = colunasBanco.find((c) => c.Key === 'PRI');
+
+  const existentes = [];
+  const faltando = new Map();
+  for (const s of silos) {
+    const col = porNome.get(s.coluna.toLowerCase());
+    if (col) existentes.push({ siloId: s.id, coluna: col.Field });
+    else faltando.set(s.id, 'coluna_inexistente');
+  }
+
+  const naoCadastradas = colunasBanco
+    .filter((c) => c !== chave && TIPO_NUMERICO.test(c.Type) && !usadas.has(c.Field.toLowerCase()))
+    .map((c) => c.Field);
+
+  return { existentes, faltando, naoCadastradas, colunaOrdem: chave?.Field ?? null };
+}
+
+/** Converte a linha lida em valores por silo; valor não numérico afeta só aquele silo. */
+function interpretarLinha(linha, plano) {
+  const valores = new Map();
+  const faltando = new Map(plano.faltando);
+  for (const { siloId, coluna } of plano.existentes) {
+    const bruto = linha[coluna];
+    const v = bruto === null || bruto === undefined || bruto === '' ? NaN : Number(bruto);
+    if (Number.isFinite(v)) valores.set(siloId, v);
+    else faltando.set(siloId, 'valor_invalido');
+  }
+  return { valores, faltando, naoCadastradas: plano.naoCadastradas };
+}
+
 /**
  * Lê a linha mais recente da tabela da IHM. Hoje a IHM sobrescreve uma única linha,
- * mas ORDER BY garante o valor certo se ela passar a inserir linhas novas.
+ * mas ORDER BY pela chave primária garante o valor certo se ela passar a inserir linhas.
  */
-function criarFonteMysql(db, silos) {
+function criarFonteMysql(db, silosIniciais, { agora = Date.now } = {}) {
+  let silos = silosIniciais;
+  let colunasBanco = [];
   const pool = mysql.createPool({
     host: db.host,
     port: db.port,
@@ -19,56 +65,98 @@ function criarFonteMysql(db, silos) {
     connectTimeout: 5000,
     enableKeepAlive: true,
   });
-  const colunas = silos.map((s) => mysql.escapeId(s.coluna)).join(', ');
-  const sql = `SELECT ${colunas} FROM ${mysql.escapeId(db.tabela)} ORDER BY 1 DESC LIMIT 1`;
-  const sqlComId = `SELECT ${colunas} FROM ${mysql.escapeId(db.tabela)} ORDER BY ${mysql.escapeId('ID')} DESC LIMIT 1`;
-  let consulta = sqlComId;
+  const tabela = mysql.escapeId(db.tabela);
+  let plano = null;
+  let descobertoEm = 0;
+
+  // Relê a estrutura da tabela de tempos em tempos: assim uma coluna criada na IHM
+  // é percebida sem reiniciar o painel.
+  async function descobrir() {
+    const [colunas] = await pool.query({ sql: `SHOW COLUMNS FROM ${tabela}`, timeout: 4000 });
+    colunasBanco = colunas;
+    plano = planejarConsulta(colunas, silos);
+    descobertoEm = agora();
+  }
+
+  /**
+   * Última temperatura de cada sensor: Map(sensor → { celsius, dataHora (texto da IHM) }).
+   * Usa MAX(id) por sensor, então só depende da chave primária da tabela.
+   */
+  async function lerTemperaturas(tabelaTemp) {
+    const t = mysql.escapeId(tabelaTemp);
+    const [linhas] = await pool.query({
+      sql: `SELECT x.Silo AS sensor, x.Temperatura AS celsius, x.data_hora AS dataHora
+              FROM ${t} x JOIN (SELECT Silo, MAX(id) AS id FROM ${t} GROUP BY Silo) u ON u.id = x.id`,
+      timeout: 4000,
+    });
+    return new Map(linhas.map((l) => [Number(l.sensor), { celsius: Number(l.celsius), dataHora: l.dataHora }]));
+  }
 
   return {
     descricao: `MySQL ${db.host}/${db.database}.${db.tabela}`,
+    lerTemperaturas,
+    atualizarSilos(novos) {
+      silos = novos;
+      plano = null; // replaneja a consulta na próxima leitura
+    },
+    /** Colunas numéricas da tabela da IHM (para a tela de configurações sugerir). */
+    colunasDisponiveis: () => colunasBanco
+      .filter((c) => c.Key !== 'PRI' && TIPO_NUMERICO.test(c.Type))
+      .map((c) => c.Field),
     async ler() {
+      if (!plano || agora() - descobertoEm > REDESCOBRIR_MS) await descobrir();
+      if (plano.existentes.length === 0) {
+        return { valores: new Map(), faltando: new Map(plano.faltando), naoCadastradas: plano.naoCadastradas };
+      }
+      const colunas = plano.existentes.map((e) => mysql.escapeId(e.coluna)).join(', ');
+      const ordem = plano.colunaOrdem ? ` ORDER BY ${mysql.escapeId(plano.colunaOrdem)} DESC` : '';
       let linhas;
       try {
-        [linhas] = await pool.query({ sql: consulta, timeout: 4000 });
+        [linhas] = await pool.query({ sql: `SELECT ${colunas} FROM ${tabela}${ordem} LIMIT 1`, timeout: 4000 });
       } catch (e) {
-        // Tabela sem coluna ID: cai para a ordenação pela primeira coluna lida.
-        if (e.code !== 'ER_BAD_FIELD_ERROR' || consulta === sql) throw e;
-        consulta = sql;
-        [linhas] = await pool.query({ sql: consulta, timeout: 4000 });
+        // Coluna removida depois da última descoberta: força reler a estrutura na próxima leitura.
+        if (e.code === 'ER_BAD_FIELD_ERROR') plano = null;
+        throw e;
       }
       if (linhas.length === 0) throw new Error(`tabela ${db.tabela} está vazia`);
-      const linha = linhas[0];
-      const leitura = new Map();
-      for (const s of silos) {
-        const v = Number(linha[s.coluna]);
-        if (!Number.isFinite(v)) throw new Error(`valor inválido na coluna ${s.coluna}: ${linha[s.coluna]}`);
-        leitura.set(s.id, v);
-      }
-      return leitura;
+      return interpretarLinha(linhas[0], plano);
     },
     fechar: () => pool.end(),
   };
 }
 
 /** Dados de demonstração: cada silo enche e esvazia em ciclos diferentes. */
-function criarFonteSimulador(silos, { agora = Date.now } = {}) {
+function criarFonteSimulador(silosIniciais, { agora = Date.now } = {}) {
+  let silos = silosIniciais;
   const inicio = agora();
   return {
     descricao: 'Simulador (dados fictícios)',
     simulado: true,
+    atualizarSilos(novos) { silos = novos; },
+    colunasDisponiveis: () => silos.map((s) => s.coluna),
     async ler() {
       const horas = (agora() - inicio) / 3_600_000;
-      const leitura = new Map();
+      const valores = new Map();
       silos.forEach((s, i) => {
         const periodoH = 1.5 + i * 0.7;
         const fase = (i * Math.PI) / 1.7;
         const fracao = 0.5 + 0.47 * Math.sin((2 * Math.PI * horas) / periodoH + fase);
-        leitura.set(s.id, Math.round(s.capacidadeLitros * fracao));
+        valores.set(s.id, Math.round(s.capacidadeLitros * fracao));
       });
-      return leitura;
+      return { valores, faltando: new Map(), naoCadastradas: [] };
+    },
+    async lerTemperaturas() {
+      const horas = (agora() - inicio) / 3_600_000;
+      const d = new Date(agora());
+      const dataHora = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()} `
+        + `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}:${String(d.getSeconds()).padStart(2, '0')}`;
+      return new Map(silos.map((s, i) => [
+        s.temperatura?.sensor ?? s.id,
+        { celsius: Math.round((3.4 + 1.1 * Math.sin((2 * Math.PI * horas) / (0.8 + i * 0.4) + i)) * 10) / 10, dataHora },
+      ]));
     },
     fechar: async () => {},
   };
 }
 
-module.exports = { criarFonteMysql, criarFonteSimulador };
+module.exports = { criarFonteMysql, criarFonteSimulador, planejarConsulta, interpretarLinha };

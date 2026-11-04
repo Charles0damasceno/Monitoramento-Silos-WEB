@@ -8,7 +8,12 @@ import DarkModeIcon from '@mui/icons-material/DarkModeOutlined';
 import LightModeIcon from '@mui/icons-material/LightModeOutlined';
 import AccountCircleIcon from '@mui/icons-material/AccountCircleOutlined';
 import LogoutIcon from '@mui/icons-material/Logout';
+import NotificationsIcon from '@mui/icons-material/NotificationsOutlined';
 import { ALERTA } from '../tema';
+import { FaixaMarca, Logos } from './Marca';
+
+const ROTULO_NOTIFICACAO = { ok: 'ativos', aguardando: 'ativos', falha: 'com falha', desligado: 'desligados' };
+const COR_NOTIFICACAO = { ok: ALERTA.ok, aguardando: ALERTA.ok, falha: ALERTA.critico, desligado: ALERTA.offline };
 import { fmtHoraSeg, haQuanto } from '../formatar';
 
 function StatusComunicacao({ retrato, servidorOnline, agora }) {
@@ -47,20 +52,37 @@ export default function Cabecalho({
 
   return (
     <AppBar position="sticky" color="inherit" elevation={0} sx={{ bgcolor: 'background.paper' }}>
-      <Toolbar sx={{ gap: 2, minHeight: { xs: 56, md: 60 }, flexWrap: { xs: 'wrap', sm: 'nowrap' }, py: { xs: 1, sm: 0 } }}>
-        <Stack direction="row" spacing={1.25} alignItems="center" sx={{ flexGrow: 1, minWidth: 0 }}>
-          <Box component="img" src="/favicon.svg" alt="" sx={{ width: 30, height: 30 }} />
-          <Box sx={{ minWidth: 0 }}>
-            <Typography variant="h1" noWrap>Painel de Silos</Typography>
-            <Typography variant="caption" color="text.secondary" noWrap sx={{ display: { xs: 'none', sm: 'block' } }}>
+      <Toolbar
+        sx={{
+          columnGap: { xs: 1, sm: 2 },
+          rowGap: 1,
+          minHeight: { xs: 56, md: 68, xl: '4.6rem' },
+          flexWrap: { xs: 'wrap', md: 'nowrap' },
+          py: { xs: 1, md: 0.5 },
+          px: { xs: 1.5, sm: 2, md: 3 },
+        }}
+      >
+        <Stack direction="row" spacing={{ xs: 1.25, md: 2 }} alignItems="center" sx={{ flexGrow: 1, minWidth: 0 }}>
+          <Box sx={{ display: { xs: 'none', sm: 'block' } }}>
+            <Logos altura={{ sm: 34, md: 40, xl: '2.9rem' }} />
+          </Box>
+          <Box sx={{ display: { xs: 'block', sm: 'none' }, minWidth: 0 }}>
+            <Logos altura={32} />
+          </Box>
+          {/* No celular o título sai para os dois logos caberem (ele continua na aba do navegador). */}
+          <Box sx={{ minWidth: 0, pl: 1, borderLeft: 1, borderColor: 'divider', display: { xs: 'none', sm: 'block' } }}>
+            <Typography variant="h1" noWrap sx={{ fontSize: { xs: '1.05rem', md: '1.2rem' } }}>Painel de Silos</Typography>
+            <Typography variant="caption" color="text.secondary" noWrap sx={{ display: { xs: 'none', lg: 'block' } }}>
               Monitoramento de nível · leite cru
             </Typography>
           </Box>
         </Stack>
 
-        <StatusComunicacao retrato={retrato} servidorOnline={servidorOnline} agora={agora} />
+        <Box sx={{ order: { xs: 3, md: 0 }, width: { xs: '100%', md: 'auto' }, display: 'flex', justifyContent: { xs: 'flex-start', md: 'flex-end' } }}>
+          <StatusComunicacao retrato={retrato} servidorOnline={servidorOnline} agora={agora} />
+        </Box>
 
-        <Typography sx={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600, display: { xs: 'none', md: 'block' } }}>
+        <Typography sx={{ fontVariantNumeric: 'tabular-nums', fontWeight: 600, display: { xs: 'none', md: 'block' }, fontSize: { xl: '1.25rem' } }}>
           {fmtHoraSeg(agora)}
         </Typography>
 
@@ -89,6 +111,17 @@ export default function Cabecalho({
                     <Typography variant="caption" color="text.secondary">{usuario.papel} · v{usuario.versao}</Typography>
                   </Box>
                 </MenuItem>
+                {usuario.notificacoes && (
+                  <MenuItem disabled sx={{ opacity: '1 !important' }}>
+                    <ListItemIcon><NotificationsIcon fontSize="small" /></ListItemIcon>
+                    <Typography variant="body2">
+                      Alertas no Telegram:{' '}
+                      <Box component="span" sx={{ fontWeight: 600, color: COR_NOTIFICACAO[usuario.notificacoes.status] }}>
+                        {ROTULO_NOTIFICACAO[usuario.notificacoes.status]}
+                      </Box>
+                    </Typography>
+                  </MenuItem>
+                )}
                 {usuario.loginObrigatorio && (
                   <MenuItem onClick={() => { setMenu(null); aoSair(); }}>
                     <ListItemIcon><LogoutIcon fontSize="small" /></ListItemIcon>Sair
@@ -99,6 +132,7 @@ export default function Cabecalho({
           )}
         </Stack>
       </Toolbar>
+      <FaixaMarca />
     </AppBar>
   );
 }

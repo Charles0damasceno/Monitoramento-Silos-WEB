@@ -6,10 +6,15 @@ const express = require('express');
 const helmet = require('helmet');
 const { COOKIE, conferirSenha, HASH_FALSO, criarLimitador, lerCookie } = require('./autenticacao');
 const { PERIODOS } = require('./armazenamento');
+const { gerarRelatorio, relatorioCsv } = require('./relatorios');
+const { registrarRotasAdmin } = require('./admin');
 
 const VERSAO = require('../package.json').version;
 
-function criarApp({ config, monitor, armazenamento, cadastro, sessoes, log, agora = Date.now }) {
+function criarApp({
+  config, monitor, armazenamento, cadastro, sessoes, log, notificador = null, fabrica = null, backup = null,
+  fonte = {}, agora = Date.now,
+}) {
   const app = express();
   const limitador = criarLimitador({ agora });
 
@@ -96,11 +101,13 @@ function criarApp({ config, monitor, armazenamento, cadastro, sessoes, log, agor
     if (!ok) {
       limitador.falhou(chave);
       log.warn(`Login recusado para "${usuario}" de ${req.ip}`);
+      armazenamento.registrarAuditoria({ ts: agora(), usuario: usuario.slice(0, 40) || null, ip: req.ip, acao: 'login_recusado' });
       return res.status(401).json({ erro: 'credenciais_invalidas', mensagem: 'Usuário ou senha incorretos.' });
     }
     limitador.sucesso(chave);
     res.cookie(COOKIE, sessoes.criar(u.usuario), opcoesCookie(req));
     log.info(`Login de "${u.usuario}" de ${req.ip}`);
+    armazenamento.registrarAuditoria({ ts: agora(), usuario: u.usuario, ip: req.ip, acao: 'login' });
     res.json({ usuario: u.usuario, nome: u.nome, papel: u.papel });
   });
 
@@ -113,7 +120,13 @@ function criarApp({ config, monitor, armazenamento, cadastro, sessoes, log, agor
   app.get('/api/eu', (req, res) => {
     const u = usuarioDaRequisicao(req);
     if (!u) return res.status(401).json({ erro: 'nao_autenticado', loginObrigatorio: true });
-    res.json({ ...u, loginObrigatorio: config.loginObrigatorio, versao: VERSAO });
+    res.json({
+      ...u,
+      loginObrigatorio: config.loginObrigatorio,
+      versao: VERSAO,
+      // Só o admin precisa saber se os alertas externos estão saindo.
+      notificacoes: u.papel === 'admin' ? (notificador?.status() ?? { canal: 'telegram', status: 'desligado' }) : undefined,
+    });
   });
 
   // ---- Rotas protegidas ----
@@ -123,12 +136,55 @@ function criarApp({ config, monitor, armazenamento, cadastro, sessoes, log, agor
   app.get('/api/historico', exigirLogin, (req, res) => {
     const periodo = String(req.query.periodo ?? '24h');
     if (!PERIODOS[periodo]) return res.status(400).json({ erro: 'periodo_invalido', validos: Object.keys(PERIODOS) });
+    const grandeza = req.query.grandeza === 'temperatura' ? 'temperatura' : 'nivel';
     const t = agora();
     res.json({
       periodo,
+      grandeza,
       ts: t,
-      silos: config.silos.map((s) => ({ id: s.id, nome: s.nome, pontos: armazenamento.historico(s.id, periodo, t) })),
+      silos: config.silos.map((s) => ({
+        id: s.id,
+        nome: s.nome,
+        pontos: grandeza === 'temperatura'
+          ? armazenamento.historicoTemperatura(s.id, periodo, t)
+          : armazenamento.historico(s.id, periodo, t),
+      })),
     });
+  });
+
+  app.get('/api/fabrica', exigirLogin, async (req, res, next) => {
+    if (!fabrica) return res.json({ disponivel: false });
+    try {
+      res.json({ disponivel: true, ...(await fabrica.painel()) });
+    } catch (e) {
+      next(e);
+    }
+  });
+
+  app.get('/api/turnos', exigirLogin, (req, res) => res.json(config.turnos));
+
+  const relatorioDaRequisicao = (req) => gerarRelatorio({
+    config, armazenamento, data: String(req.query.data ?? ''), turno: String(req.query.turno ?? 'dia'), turnos: config.turnos,
+  });
+
+  app.get('/api/relatorio', exigirLogin, (req, res) => {
+    try {
+      res.json(relatorioDaRequisicao(req));
+    } catch (e) {
+      res.status(400).json({ erro: 'parametro_invalido', mensagem: e.message });
+    }
+  });
+
+  app.get('/api/relatorio.csv', exigirLogin, (req, res) => {
+    let r;
+    try {
+      r = relatorioDaRequisicao(req);
+    } catch (e) {
+      return res.status(400).type('text').send(e.message);
+    }
+    const nome = `silos_${r.data}_${r.turno === 'dia' ? 'dia' : `turno${r.turno}`}.csv`;
+    res.set('Content-Disposition', `attachment; filename="${nome}"`);
+    res.type('text/csv; charset=utf-8').send(relatorioCsv(r));
   });
 
   app.get('/api/eventos', exigirLogin, (req, res) => {
@@ -142,6 +198,7 @@ function criarApp({ config, monitor, armazenamento, cadastro, sessoes, log, agor
     const ok = armazenamento.reconhecerEvento(id, req.usuario.nome, agora());
     if (!ok) return res.status(409).json({ erro: 'ja_reconhecido_ou_inexistente' });
     log.info(`Evento ${id} reconhecido por ${req.usuario.usuario}`);
+    armazenamento.registrarAuditoria({ ts: agora(), usuario: req.usuario.usuario, ip: req.ip, acao: 'alarme_reconhecido', detalhe: `evento ${id}` });
     monitor.eventos.emit('reconhecido', { id, por: req.usuario.nome, em: agora() });
     res.status(204).end();
   });
@@ -173,6 +230,11 @@ function criarApp({ config, monitor, armazenamento, cadastro, sessoes, log, agor
       monitor.eventos.off('evento', aoEvento);
       monitor.eventos.off('reconhecido', aoReconhecido);
     });
+  });
+
+  registrarRotasAdmin(app, {
+    config, monitor, armazenamento, cadastro, sessoes, notificador, backup, fonte, log,
+    exigirLogin, mesmaOrigem, opcoesCookie, agora,
   });
 
   app.use('/api', (req, res) => res.status(404).json({ erro: 'rota_inexistente' }));

@@ -16,7 +16,9 @@ function Indicador({ rotulo, valor, sub }) {
 export default function ResumoGeral({ silos }) {
   const validos = silos.filter((s) => s.litros !== null);
   const total = validos.reduce((a, s) => a + s.litros, 0);
-  const capacidade = silos.reduce((a, s) => a + s.capacidadeLitros, 0);
+  // Só soma a capacidade de quem tem leitura, senão o "espaço livre" inclui silos sem dado.
+  const capacidade = validos.reduce((a, s) => a + s.capacidadeLitros, 0);
+  const semLeitura = silos.length - validos.length;
   const ocupacao = capacidade ? (total / capacidade) * 100 : null;
   const comVazao = silos.filter((s) => s.vazaoLh !== null && !s.desatualizado);
   const vazaoTotal = comVazao.length ? comVazao.reduce((a, s) => a + s.vazaoLh, 0) : null;
@@ -25,7 +27,7 @@ export default function ResumoGeral({ silos }) {
   return (
     <Paper sx={{ p: 2 }}>
       <Stack direction="row" flexWrap="wrap" useFlexGap spacing={{ xs: 2, md: 5 }} alignItems="flex-start">
-        <Indicador rotulo="Leite armazenado" valor={litros(validos.length ? total : null)} sub={`de ${litros(capacidade)}`} />
+        <Indicador rotulo="Leite armazenado" valor={litros(validos.length ? total : null)} sub={`de ${litros(capacidade)}${semLeitura ? ` · ${semLeitura} silo(s) sem leitura` : ''}`} />
         <Box sx={{ flex: 1, minWidth: 200, alignSelf: 'center' }}>
           <Stack direction="row" justifyContent="space-between" mb={0.5}>
             <Typography variant="caption" color="text.secondary">Ocupação total</Typography>

@@ -8,6 +8,10 @@ const { criarFonteMysql, criarFonteSimulador } = require('./fontes');
 const { criarMonitor } = require('./monitor');
 const { criarCadastro, criarSessoes } = require('./autenticacao');
 const { criarApp } = require('./app');
+const { criarClienteTelegram } = require('./telegram');
+const { criarNotificador } = require('./notificador');
+const { criarFabrica } = require('./fabrica');
+const { criarBackup } = require('./backup');
 
 async function principal() {
   carregarEnv(path.join(RAIZ, '.env'));
@@ -29,13 +33,33 @@ async function principal() {
   if (fonte.simulado) log.warn('FONTE_DADOS=simulador: o painel mostra DADOS FICTÍCIOS.');
 
   const monitor = criarMonitor({ config, fonte, armazenamento, log });
+
+  // O notificador assina os eventos antes do monitor começar, para não perder os alarmes da 1ª leitura.
+  let notificador = null;
+  if (config.telegram) {
+    notificador = criarNotificador({
+      config, monitor, armazenamento, log, cliente: criarClienteTelegram({ token: config.telegram.token }),
+    });
+    notificador.iniciar();
+  } else {
+    log.info('Alertas no Telegram desligados (TELEGRAM_TOKEN vazio).');
+  }
+
   await monitor.iniciar();
+
+  const backup = criarBackup({
+    armazenamento, log, pastaDados: config.pastaDados, ...config.backup,
+  });
+  backup.iniciar();
 
   const limpeza = setInterval(() => armazenamento.limparAntigos(config.retencaoDias), 6 * 3_600_000);
   armazenamento.limparAntigos(config.retencaoDias);
 
-  const app = criarApp({ config, monitor, armazenamento, cadastro, sessoes, log });
-  const servidor = app.listen(config.porta, config.host, () => {
+  const fabrica = config.fabrica ? criarFabrica({ db: config.db, nomes: config.fabrica.nomes }) : null;
+  const app = criarApp({ config, monitor, armazenamento, cadastro, sessoes, log, notificador, fabrica, backup, fonte });
+  // No Express 5 este callback também é chamado em caso de erro (tratado no 'error' abaixo).
+  const servidor = app.listen(config.porta, config.host, (erro) => {
+    if (erro) return;
     log.info(`Painel de silos em http://${config.host === '0.0.0.0' ? 'localhost' : config.host}:${config.porta}`);
   });
   servidor.on('error', (e) => {
@@ -52,8 +76,11 @@ async function principal() {
     encerrando = true;
     log.info(`Encerrando (${sinal})...`);
     clearInterval(limpeza);
+    notificador?.parar();
     servidor.closeAllConnections();
     servidor.close();
+    backup.parar();
+    await fabrica?.fechar().catch(() => {});
     await monitor.parar().catch(() => {});
     armazenamento.fechar();
     log.fechar();

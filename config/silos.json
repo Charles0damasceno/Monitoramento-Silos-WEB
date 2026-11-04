@@ -1,26 +1,53 @@
 {
-  "$comentario": "Cadastro dos silos. 'coluna' é o nome da coluna na tabela do MySQL da IHM. Limites em % da capacidade.",
+  "$comentario": "Cadastro dos silos. coluna = coluna do nível na tabela da IHM. limites em % da capacidade. temperatura.sensor = valor da coluna Silo na tabela temperatura_silo; maxC = alarme de temperatura alta (null = sem alarme).",
   "silos": [
     {
       "id": 1,
       "nome": "Silo 1",
       "coluna": "Silo1",
       "capacidadeLitros": 100000,
-      "limites": { "muitoBaixo": 5, "baixo": 10, "alto": 90, "muitoAlto": 95 }
+      "limites": {
+        "muitoBaixo": 5,
+        "baixo": 10,
+        "alto": 90,
+        "muitoAlto": 95
+      },
+      "temperatura": {
+        "sensor": 1,
+        "maxC": 4
+      }
     },
     {
       "id": 2,
       "nome": "Silo 2",
       "coluna": "Silo2",
       "capacidadeLitros": 100000,
-      "limites": { "muitoBaixo": 5, "baixo": 10, "alto": 90, "muitoAlto": 95 }
+      "limites": {
+        "muitoBaixo": 5,
+        "baixo": 10,
+        "alto": 90,
+        "muitoAlto": 95
+      },
+      "temperatura": {
+        "sensor": 2,
+        "maxC": 4
+      }
     },
     {
       "id": 3,
       "nome": "Silo 3",
       "coluna": "Silo3",
       "capacidadeLitros": 100000,
-      "limites": { "muitoBaixo": 5, "baixo": 10, "alto": 90, "muitoAlto": 95 }
+      "limites": {
+        "muitoBaixo": 5,
+        "baixo": 10,
+        "alto": 90,
+        "muitoAlto": 95
+      },
+      "temperatura": {
+        "sensor": 3,
+        "maxC": 4
+      }
     }
   ]
 }

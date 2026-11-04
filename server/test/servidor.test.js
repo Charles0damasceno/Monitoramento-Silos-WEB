@@ -12,6 +12,7 @@ const { criarMonitor } = require('../src/monitor');
 const { criarCadastro, criarSessoes, criarLimitador, conferirSenha, gerarHash } = require('../src/autenticacao');
 const { criarApp } = require('../src/app');
 const { logSilencioso } = require('../src/log');
+const { planejarConsulta, interpretarLinha } = require('../src/fontes');
 
 const SILOS = validarSilos([
   { id: 1, nome: 'Silo 1', coluna: 'Silo1', capacidadeLitros: 100_000, limites: { muitoBaixo: 5, baixo: 10, alto: 90, muitoAlto: 95 } },
@@ -20,12 +21,14 @@ const SILOS = validarSilos([
 
 function fonteControlada(inicial) {
   let valores = new Map(inicial);
+  let faltando = new Map();
+  let naoCadastradas = [];
   let erro = null;
   return {
     descricao: 'teste',
-    definir: (m) => { valores = new Map(m); },
+    definir: (m, f = [], n = []) => { valores = new Map(m); faltando = new Map(f); naoCadastradas = n; },
     falhar: (e) => { erro = e; },
-    async ler() { if (erro) throw erro; return valores; },
+    async ler() { if (erro) throw erro; return { valores, faltando, naoCadastradas }; },
     fechar: async () => {},
   };
 }
@@ -146,6 +149,68 @@ test('monitor grava histórico no intervalo configurado e calcula vazão', async
   const silo = monitor.retrato().silos[0];
   assert.ok(Math.abs(silo.vazaoLh - 6000) < 800, `vazão ${silo.vazaoLh}`);
   assert.equal(silo.previsao.tendencia, 'enchendo');
+});
+
+// ---------- Silos e colunas ----------
+
+const COLUNAS_BANCO = [
+  { Field: 'ID', Type: 'int(11)', Key: 'PRI' },
+  { Field: 'Silo1', Type: 'int(11)', Key: '' },
+  { Field: 'Silo2', Type: 'int(11)', Key: '' },
+  { Field: 'Silo3', Type: 'int(11)', Key: '' },
+  { Field: 'obs', Type: 'varchar(20)', Key: '' },
+];
+
+test('planejarConsulta separa colunas existentes, faltando e não cadastradas', () => {
+  const silos = [...SILOS, { ...SILOS[0], id: 4, coluna: 'Silo4' }];
+  const p = planejarConsulta(COLUNAS_BANCO, silos);
+  assert.deepEqual(p.existentes.map((e) => e.coluna), ['Silo1', 'Silo2']);
+  assert.deepEqual([...p.faltando], [[4, 'coluna_inexistente']]);
+  assert.deepEqual(p.naoCadastradas, ['Silo3'], 'ignora a chave primária e colunas de texto');
+  assert.equal(p.colunaOrdem, 'ID');
+});
+
+test('planejarConsulta ignora maiúsculas/minúsculas e usa o nome real da coluna', () => {
+  const p = planejarConsulta(COLUNAS_BANCO, [{ ...SILOS[0], coluna: 'silo1' }]);
+  assert.deepEqual(p.existentes, [{ siloId: 1, coluna: 'Silo1' }]);
+});
+
+test('interpretarLinha: valor inválido afeta só aquele silo', () => {
+  const p = planejarConsulta(COLUNAS_BANCO, SILOS);
+  const r = interpretarLinha({ Silo1: 1200, Silo2: null }, p);
+  assert.deepEqual([...r.valores], [[1, 1200]]);
+  assert.deepEqual([...r.faltando], [[2, 'valor_invalido']]);
+});
+
+test('silo sem coluna fica "sem leitura" e os demais seguem normais', async () => {
+  const { fonte, armazenamento, monitor, avancar } = montar();
+  fonte.definir([[1, 50_000]], [[2, 'coluna_inexistente']]);
+  await monitor.ciclo();
+
+  const r = monitor.retrato();
+  assert.equal(r.comunicacao.status, 'ok');
+  assert.equal(r.silos[0].desatualizado, false);
+  assert.equal(r.silos[1].desatualizado, true);
+  assert.equal(r.silos[1].motivoSemLeitura, 'coluna_inexistente');
+  assert.equal(r.silos[1].litros, null);
+
+  avancar(2000); await monitor.ciclo(); // não repete o evento
+  fonte.definir([[1, 50_000], [2, 10_000]]);
+  avancar(2000); await monitor.ciclo();
+  const leitura = armazenamento.eventos().filter((e) => e.tipo === 'leitura').map((e) => e.estado);
+  assert.deepEqual(leitura, ['ok', 'sem_leitura']);
+  assert.equal(monitor.retrato().silos[1].litros, 10_000);
+});
+
+test('coluna nova no banco gera um único aviso e aparece no retrato', async () => {
+  const { fonte, armazenamento, monitor, avancar } = montar();
+  fonte.definir([[1, 50_000], [2, 25_000]], [], ['Silo4']);
+  await monitor.ciclo();
+  avancar(2000); await monitor.ciclo();
+  const avisos = armazenamento.eventos().filter((e) => e.estado === 'coluna_nova');
+  assert.equal(avisos.length, 1);
+  assert.match(avisos[0].mensagem, /Silo4/);
+  assert.deepEqual(monitor.retrato().colunasNaoCadastradas, ['Silo4']);
 });
 
 // ---------- HTTP ----------

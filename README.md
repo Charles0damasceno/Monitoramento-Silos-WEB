@@ -74,7 +74,35 @@ Os logs ficam em `logs\AAAA-MM-DD.log` (30 dias).
   "limites": { "muitoBaixo": 5, "baixo": 10, "alto": 90, "muitoAlto": 95 } }
 ```
 
-Para incluir um 4º silo, basta acrescentar um item com a coluna correspondente na tabela da IHM.
+### Tela de Configurações (administradores)
+
+A aba **Configurações** só aparece para usuários com papel *admin*:
+
+| Seção | O que faz |
+|---|---|
+| **Silos** | Adicionar, editar e remover silos (nome, coluna, capacidade, limites, temperatura). Vale **na hora, sem reiniciar**; a versão anterior fica em `config/silos.anterior.json` |
+| **Usuários** | Criar, editar, trocar senha e remover. Trocar a senha desconecta o usuário em todos os aparelhos. Não é possível remover a si mesmo nem o último administrador |
+| **Alertas** | Situação do Telegram e botão *Enviar teste* |
+| **Sistema** | Versão, origem dos dados, parâmetros do `.env` e *Fazer backup agora* |
+| **Auditoria** | Quem entrou, quem errou a senha, quem alterou silos/usuários e quem reconheceu alarmes |
+
+Token do Telegram, senha do banco e demais parâmetros do `.env` continuam só no servidor — de propósito, não são editáveis pelo navegador.
+
+### Adicionar um silo novo
+
+> Pelo navegador: **Configurações → Silos → Adicionar silo**. O passo a passo abaixo é a alternativa pelo arquivo.
+
+1. **Na IHM:** crie a coluna do silo na tabela `silo` (ex.: `Silo4`) e configure a IHM para gravar o nível em litros nela.
+2. **O painel avisa sozinho:** em até 5 minutos aparece, para usuários *admin*, a faixa azul *"A coluna Silo4 existe no banco e não está cadastrada"*, e o evento fica no registro.
+3. **Cadastre** em `config/silos.json` (vírgula depois do item anterior):
+   ```json
+   { "id": 4, "nome": "Silo 4", "coluna": "Silo4", "capacidadeLitros": 150000,
+     "limites": { "muitoBaixo": 5, "baixo": 10, "alto": 90, "muitoAlto": 95 } }
+   ```
+   Use um `id` novo — nunca reaproveite o de um silo removido, pois o histórico fica ligado a ele.
+4. **Reinicie:** `npm run servico -- reiniciar` (PowerShell como administrador).
+
+Cada silo é lido de forma independente: se a coluna cadastrada não existir (ou tiver valor inválido), **só aquele silo** fica cinza com *"Coluna não encontrada no banco"*; os demais continuam funcionando normalmente. O nome da coluna não diferencia maiúsculas de minúsculas.
 
 ### Alarmes
 
@@ -88,9 +116,85 @@ Para incluir um 4º silo, basta acrescentar um item com a coluna correspondente 
 
 Para sair de um alarme o nível precisa recuar **2 pontos** além do limite (histerese), evitando alarmes repetidos quando o nível oscila em cima da linha.
 
+### Alertas no celular (Telegram)
+
+Os alarmes críticos (e a perda de comunicação) chegam num grupo do Telegram, com botão **✅ Reconhecer**. Se ninguém reconhecer, o painel repete o aviso a cada 15 min; quando o nível normaliza, manda "✅ Normalizado". No grupo, o comando `/status` responde com o nível atual de todos os silos.
+
+1. No Telegram, fale com **@BotFather** → `/newbot` → escolha um nome (ex.: *Painel Silos Fábrica*). Ele devolve um **token**.
+2. Cole o token em `TELEGRAM_TOKEN` no `.env`.
+3. Crie um grupo (ex.: *Alarmes Silos*), adicione o bot e as pessoas que devem receber os alertas, e mande qualquer mensagem no grupo.
+4. Descubra o número do grupo e coloque em `TELEGRAM_CHAT_ID`:
+   ```
+   npm run telegram -- descobrir
+   npm run telegram -- testar
+   ```
+5. Reinicie o serviço. No menu do usuário (admin) aparece *Alertas no Telegram: ativos*.
+
+| Opção no `.env` | Padrão | Efeito |
+|---|---|---|
+| `NOTIFICAR_SEVERIDADE` | `critico` | `atencao` também envia nível alto/baixo e silo sem leitura |
+| `NOTIFICAR_REPETIR_MIN` | `15` | Lembrete enquanto ninguém reconhece (`0` = não repete) |
+| `TELEGRAM_RECONHECER` | `true` | Botão de reconhecer na mensagem (fica registrado "Fulano (Telegram)") |
+
+O servidor só precisa de acesso de **saída** à internet (`api.telegram.org`, porta 443) — nada é aberto no roteador. Sem internet, as mensagens ficam na fila por até 2 h e saem quando a conexão voltar. Qualquer pessoa no grupo pode reconhecer alarmes: mantenha o grupo restrito.
+
 ### Falta de comunicação
 
 Após 3 leituras seguidas com erro (`FALHAS_PARA_OFFLINE`), o painel mostra **SEM COMUNICAÇÃO**, deixa os tanques cinza e hachurados com o último valor válido, e registra o evento. A rota `GET /api/saude` responde `503` nesse caso — útil para ferramentas de monitoramento (Zabbix, PRTG, Uptime Kuma).
+
+### Temperatura dos silos
+
+O painel lê a tabela `temperatura_silo` da IHM (`id`, `Silo`, `Temperatura`, `data_hora`) e mostra a temperatura em cada tanque, com alarme **crítico** acima do limite. O limite fica em `config/silos.json`:
+
+```json
+"temperatura": { "sensor": 1, "maxC": 4 }
+```
+
+`sensor` é o valor da coluna `Silo` na tabela (padrão: o `id` do silo); `maxC: null` mostra a temperatura sem alarme. Leitura com `data_hora` mais velha que `TEMPERATURA_VALIDADE_MIN` aparece como *desatualizada* (nunca como valor atual).
+
+> **Hoje a tabela `temperatura_silo` está vazia** — os cartões mostram "Temperatura: sem sensor" até a IHM passar a gravar nela.
+
+### Detecção de anomalias
+
+| Anomalia | Quando dispara | Por quê |
+|---|---|---|
+| **Leitura suspeita** | O nível varia mais de 5 % da capacidade entre duas leituras seguidas (2 s) | Nenhum silo enche 5.000 L em 2 s: é sensor, cabo ou gravação com problema |
+| **Níveis congelados** | Algum silo em nível intermediário e **todos** os valores idênticos por 4 h | A tabela da IHM não tem data/hora; se a IHM parar de gravar, o valor velho parece real. Silo vazio ou cheio parado não conta |
+
+Ajuste em `ANOMALIA_SALTO_PCT` e `ANOMALIA_CONGELADO_H` (0 desliga).
+
+### Relatórios
+
+Aba **Relatórios**: escolha a data e o turno (ou o dia inteiro) e veja, por silo, o nível no início e no fim, mínimo/máximo, **entrada e saída estimadas**, temperatura mínima/máxima e os alarmes com quem reconheceu. Botões **Excel** (CSV com acentos e vírgula decimal) e **Imprimir / PDF** (A4 paisagem, com linhas de assinatura).
+
+A coluna *Dados* mostra a cobertura: abaixo de 90 % significa que o painel ficou desligado ou sem comunicação parte do período. Os turnos são configurados em `TURNOS` no `.env`.
+
+### Painel da fábrica
+
+Aba **Fábrica** (só com `FONTE_DADOS=mysql`), lendo as outras tabelas da IHM — sempre com o selo de **há quanto tempo** cada dado foi gravado:
+
+- **Ultrafiltração 1 e 2:** status atual, histórico de mudanças e a última campanha (duração e totalizadores). Os códigos de status (ex.: 1035) ganham nome em `config/fabrica.json` → `statusUF`.
+- **Queijomáticas:** volume por dia e por equipamento (30 dias) e os últimos lotes.
+- **Recepção de leite:** caminhão na plataforma e últimas descargas, com diagnóstico da qualidade da gravação.
+
+> **Achados no banco (03/11/2026):** desde 04/04/2025 as descargas são gravadas **sem horário e sem volume medido**; a última produção de queijomática registrada é de 31/07/2026; as tabelas `temp_queijomatica` e `temperaturas` estão **corrompidas** no MySQL ("doesn't exist in engine").
+
+### Backup
+
+Todo dia às 03:00 o painel copia o histórico (`historico-AAAA-MM-DD.db`) e o cadastro de usuários para `data\backups` e mantém os últimos 14 dias. Para guardar fora do servidor, aponte `BACKUP_PASTA` para uma pasta de rede (ex.: `\\servidor\backups\silos`) — o usuário do serviço precisa ter permissão de escrita nela.
+
+Para restaurar: pare o serviço, copie o arquivo do dia para `data\historico.db` e inicie o serviço.
+
+### Monitoramento externo
+
+A rota `GET /api/saude` não exige login e responde `200` quando o painel lê o banco da IHM e `503` quando não lê. Exemplo com **Uptime Kuma**: novo monitor *HTTP(s)*, URL `http://<servidor>:12322/api/saude`, intervalo 60 s — ele avisa se o servidor do painel cair (situação em que o próprio painel não consegue mandar o Telegram).
+
+### Acesso de fora da fábrica
+
+Não abra a porta 12322 no roteador. Use uma VPN:
+
+- **Tailscale** (mais simples): instale no servidor do painel e nos celulares; acesse `http://<nome-do-servidor>:12322`. Grátis para poucos usuários.
+- **VPN da empresa** (WireGuard/OpenVPN/FortiClient): peça à TI para liberar o IP do servidor na VPN.
 
 ## Desenvolvimento
 

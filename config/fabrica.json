@@ -1,0 +1,18 @@
+{
+  "$comentario": "Nomes exibidos no painel da fábrica. statusUF traduz os códigos de status gravados pela IHM da ultrafiltração (preencha com a lista do fornecedor; códigos sem nome aparecem como número). A chave '*' vale para UF1 e UF2.",
+  "uf": {
+    "uf1": "Ultrafiltração 1",
+    "uf2": "Ultrafiltração 2"
+  },
+  "statusUF": {
+    "*": {
+      "0": "Parada"
+    }
+  },
+  "queijomaticas": {
+    "1": "Queijomática 1",
+    "2": "Queijomática 2",
+    "3": "Queijomática 3",
+    "4": "Queijomática 4"
+  }
+}

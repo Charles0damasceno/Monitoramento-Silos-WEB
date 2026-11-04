@@ -4,6 +4,7 @@
 //   npm run usuario -- listar
 //   npm run usuario -- adicionar joao --nome "João Silva" [--admin]
 //   npm run usuario -- senha joao
+//   npm run usuario -- papel joao admin|operador
 //   npm run usuario -- remover joao
 
 const path = require('node:path');
@@ -63,6 +64,18 @@ async function principal() {
       console.log(`Senha de "${usuario}" alterada; sessões abertas foram encerradas.`);
       break;
     }
+    case 'papel': {
+      const [papel] = resto;
+      if (!cadastro.buscar(usuario)) throw new Error(`"${usuario}" não existe`);
+      if (!['admin', 'operador'].includes(papel)) throw new Error('informe o papel: admin ou operador');
+      const admins = cadastro.listar().filter((u) => u.papel === 'admin');
+      if (papel === 'operador' && admins.length === 1 && admins[0].usuario === usuario) {
+        throw new Error('precisa existir pelo menos um administrador');
+      }
+      cadastro.atualizar(usuario, { papel });
+      console.log(`"${usuario}" agora é ${papel === 'admin' ? 'administrador' : 'operador'}.`);
+      break;
+    }
     case 'remover': {
       if (!cadastro.remover(usuario)) throw new Error(`"${usuario}" não existe`);
       encerrarSessoes(usuario);
@@ -70,7 +83,7 @@ async function principal() {
       break;
     }
     default:
-      console.log('Uso: npm run usuario -- listar | adicionar <usuario> [--nome "Nome"] [--admin] | senha <usuario> | remover <usuario>');
+      console.log('Uso: npm run usuario -- listar | adicionar <usuario> [--nome "Nome"] [--admin] | senha <usuario> | papel <usuario> admin|operador | remover <usuario>');
       process.exitCode = comando ? 1 : 0;
   }
 }
