@@ -8,3 +8,4 @@ data/
 logs/
 *.log
 server/daemon/
+dist-pacote/

@@ -1,6 +1,6 @@
 {
   "name": "painel-silos",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "private": true,
   "description": "Painel de monitoramento de nível dos silos de leite",
   "workspaces": [
@@ -19,6 +19,8 @@
     "test": "npm test --workspace server",
     "usuario": "npm run usuario --workspace server --",
     "servico": "npm run servico --workspace server --",
-    "telegram": "npm run telegram --workspace server --"
+    "telegram": "npm run telegram --workspace server --",
+    "diagnostico": "npm run diagnostico --workspace server",
+    "pacote": "node scripts/empacotar.js"
   }
 }

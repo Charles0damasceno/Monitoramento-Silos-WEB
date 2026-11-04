@@ -1,6 +1,6 @@
 {
   "name": "painel-silos-servidor",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "private": true,
   "main": "src/index.js",
   "engines": {
@@ -12,7 +12,8 @@
     "test": "node --disable-warning=ExperimentalWarning --test \"test/**/*.test.js\"",
     "usuario": "node --disable-warning=ExperimentalWarning scripts/usuario.js",
     "servico": "node scripts/servico.js",
-    "telegram": "node --disable-warning=ExperimentalWarning scripts/telegram.js"
+    "telegram": "node --disable-warning=ExperimentalWarning scripts/telegram.js",
+    "diagnostico": "node --disable-warning=ExperimentalWarning scripts/diagnostico.js"
   },
   "dependencies": {
     "express": "^5.3.0",

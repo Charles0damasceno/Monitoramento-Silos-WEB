@@ -20,6 +20,14 @@ function inteiro(env, nome, padrao, { min = 0, max = Number.MAX_SAFE_INTEGER } =
   return n;
 }
 
+function decimal(env, nome, padrao, { min, max }) {
+  const bruto = env[nome];
+  if (bruto === undefined || bruto === '') return padrao;
+  const n = Number(String(bruto).replace(',', '.'));
+  if (!Number.isFinite(n) || n < min || n > max) throw new Error(`${nome} inválido: "${bruto}" (esperado número entre ${min} e ${max})`);
+  return n;
+}
+
 function booleano(env, nome, padrao) {
   const bruto = (env[nome] ?? '').trim().toLowerCase();
   if (bruto === '') return padrao;
@@ -35,7 +43,17 @@ function lerHora(texto, nome) {
   return Number(m[1]) * 60 + Number(m[2]);
 }
 
+/**
+ * Os pacotes de instalação trazem o cadastro como "*.padrao.json" para que extrair uma versão
+ * nova por cima não apague os silos cadastrados pela tela. Na primeira execução, copia o padrão.
+ */
+function garantirArquivo(arquivo) {
+  const padrao = arquivo.replace(/\.json$/, '.padrao.json');
+  if (!fs.existsSync(arquivo) && fs.existsSync(padrao)) fs.copyFileSync(padrao, arquivo);
+}
+
 function lerJsonOpcional(arquivo) {
+  garantirArquivo(arquivo);
   if (!fs.existsSync(arquivo)) return {};
   try {
     return JSON.parse(fs.readFileSync(arquivo, 'utf8'));
@@ -115,6 +133,7 @@ function carregarConfig({
     throw new Error(`NOTIFICAR_SEVERIDADE inválida: "${env.NOTIFICAR_SEVERIDADE}" (use critico ou atencao)`);
   }
 
+  garantirArquivo(arquivoSilos);
   const silos = validarSilos(JSON.parse(fs.readFileSync(arquivoSilos, 'utf8')).silos);
 
   const tabelaTemperatura = (env.TEMPERATURA_TABELA ?? 'temperatura_silo').trim();
@@ -152,6 +171,8 @@ function carregarConfig({
       ? { nomes: lerJsonOpcional(path.join(RAIZ, 'config', 'fabrica.json')) }
       : null,
     turnos: lerTurnos(env.TURNOS || '06:00-14:00,14:00-22:00,22:00-06:00'),
+    // Até este % o silo é "vazio" (sem alarme); 0 = alarmes de nível baixo valem sempre.
+    vazioPct: decimal(env, 'SILO_VAZIO_PCT', 0.5, { min: 0, max: 5 }),
     anomalias: {
       saltoPct: inteiro(env, 'ANOMALIA_SALTO_PCT', 5, { min: 0, max: 100 }),
       congeladoMs: inteiro(env, 'ANOMALIA_CONGELADO_H', 4, { min: 0, max: 168 }) * 3_600_000,

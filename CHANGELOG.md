@@ -1,5 +1,18 @@
 # Changelog
 
+## 2.4.0 — 2026-11-03
+
+### Novo
+- **Instaladores:** Windows (`instalar.bat` → assistente com instalação do Node.js pelo winget, `.env` com acesso restrito, diagnóstico, administrador, firewall, serviço e atalho) e Linux (`instalar.sh` → usuário de sistema, serviço systemd com proteções, ufw/firewalld). Ambos atualizam sem apagar dados e aceitam instalação automatizada (`CFG_*`, `PAINEL_SENHA`). Desinstaladores para os dois.
+- **Pacotes de distribuição:** `npm run pacote` gera `.zip` (Windows) e `.tar.gz` (Linux) com o site já compilado, sem `.env`, dados ou usuários.
+- **`npm run diagnostico`:** confere conexão, permissões do usuário do banco, tabela e colunas, valores atuais, temperatura, porta, usuários, pastas e Telegram antes de entrar em produção.
+- `docs/mysql-usuario-somente-leitura.sql`: cria o usuário `painel_silos` só com `SELECT`.
+- **Silo vazio** deixa de ser alarme: estados *Vazio* e *Enchendo* (informativos); alarmes de nível baixo só quando o nível desce a partir do normal (`SILO_VAZIO_PCT`).
+- `npm run usuario -- papel <usuario> admin|operador`.
+
+### Correções
+- Atualizar extraindo um pacote por cima não apaga mais o cadastro de silos feito pela tela (`config/*.padrao.json`).
+
 ## 2.3.0 — 2026-11-03
 
 ### Novo

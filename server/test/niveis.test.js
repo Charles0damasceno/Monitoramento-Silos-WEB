@@ -45,6 +45,28 @@ test('histerese na parte baixa', () => {
   assert.equal(classificar(8, LIM, E.MUITO_BAIXO), E.BAIXO);
 });
 
+test('silo vazio: informativo, e encher a partir do vazio não dispara alarme de nível baixo', () => {
+  const V = 0.5;
+  assert.equal(classificar(0, LIM, E.NORMAL, 2, V), E.VAZIO, 'vazio na partida não é alarme');
+  assert.equal(classificar(0.7, LIM, E.VAZIO, 2, V), E.VAZIO, 'histerese de 0,5 ponto na saída do vazio');
+  let estado = E.VAZIO;
+  for (const pct of [1.5, 4, 8, 10]) {
+    estado = classificar(pct, LIM, estado, 2, V);
+    assert.equal(estado, E.ENCHENDO, `em ${pct}% enchendo, sem alarme`);
+  }
+  estado = classificar(30, LIM, estado, 2, V);
+  assert.equal(estado, E.NORMAL);
+  // Descendo a partir do normal, os alarmes de nível baixo valem.
+  assert.equal(classificar(9, LIM, estado, 2, V), E.BAIXO);
+  assert.equal(classificar(3, LIM, E.BAIXO, 2, V), E.MUITO_BAIXO);
+  assert.equal(classificar(0.2, LIM, E.MUITO_BAIXO, 2, V), E.VAZIO, 'esvaziou: o alarme termina');
+});
+
+test('com vazioPct = 0 o comportamento antigo é mantido', () => {
+  assert.equal(classificar(0, LIM, E.NORMAL, 2, 0), E.MUITO_BAIXO);
+  assert.equal(classificar(4, LIM, E.VAZIO, 2, 0), E.MUITO_BAIXO);
+});
+
 test('leitura nula mantém o estado anterior', () => {
   assert.equal(classificar(null, LIM, E.ALTO), E.ALTO);
 });

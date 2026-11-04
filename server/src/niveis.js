@@ -4,6 +4,8 @@
 
 /** Estados possíveis, do mais vazio ao mais cheio (nomenclatura ISA: LL, L, H, HH). */
 const ESTADOS = Object.freeze({
+  VAZIO: 'vazio', // silo vazio parado (após descarga ou limpeza): informativo
+  ENCHENDO: 'enchendo', // saindo do vazio, ainda abaixo do limite baixo: informativo
   MUITO_BAIXO: 'muito_baixo', // LL
   BAIXO: 'baixo', // L
   NORMAL: 'normal',
@@ -12,6 +14,8 @@ const ESTADOS = Object.freeze({
 });
 
 const SEVERIDADE = Object.freeze({
+  [ESTADOS.VAZIO]: null,
+  [ESTADOS.ENCHENDO]: null,
   [ESTADOS.MUITO_BAIXO]: 'critico',
   [ESTADOS.BAIXO]: 'atencao',
   [ESTADOS.NORMAL]: null,
@@ -32,11 +36,22 @@ function percentual(litros, capacidade) {
  *
  * Entrar num alarme é imediato ao cruzar o limite; sair exige recuar HISTERESE_PCT abaixo
  * (ou acima) dele. Sem isso, um silo oscilando em 90,0 ↔ 89,9 % gera um alarme a cada leitura.
+ *
+ * Com `vazioPct` (> 0): até esse nível o silo está VAZIO, sem alarme. Saindo do vazio ele fica
+ * ENCHENDO até passar do limite baixo — os alarmes de nível baixo só valem quando o nível DESCE
+ * a partir do normal (risco de a bomba puxar ar), não a cada enchimento.
  */
-function classificar(pct, limites, anterior = ESTADOS.NORMAL, histerese = HISTERESE_PCT) {
+function classificar(pct, limites, anterior = ESTADOS.NORMAL, histerese = HISTERESE_PCT, vazioPct = 0) {
   if (pct === null) return anterior;
   const { muitoBaixo, baixo, alto, muitoAlto } = limites;
   const subindoDe = (estado) => anterior === estado;
+
+  if (vazioPct > 0) {
+    if (pct <= vazioPct) return ESTADOS.VAZIO;
+    const saindoDoVazio = subindoDe(ESTADOS.VAZIO) || subindoDe(ESTADOS.ENCHENDO);
+    if (saindoDoVazio && pct < vazioPct + 0.5 && subindoDe(ESTADOS.VAZIO)) return ESTADOS.VAZIO;
+    if (saindoDoVazio && pct <= baixo) return ESTADOS.ENCHENDO;
+  }
 
   if (pct >= muitoAlto) return ESTADOS.MUITO_ALTO;
   if (subindoDe(ESTADOS.MUITO_ALTO) && pct > muitoAlto - histerese) return ESTADOS.MUITO_ALTO;

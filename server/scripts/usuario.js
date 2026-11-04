@@ -26,6 +26,8 @@ function perguntarSenha(rotulo) {
 }
 
 async function novaSenha() {
+  // Instalação automatizada: a senha pode vir da variável PAINEL_SENHA (não aparece no histórico do terminal).
+  if (process.env.PAINEL_SENHA) return process.env.PAINEL_SENHA;
   const a = await perguntarSenha('Senha (mín. 8 caracteres): ');
   const b = await perguntarSenha('Repita a senha: ');
   if (a !== b) throw new Error('as senhas não conferem');

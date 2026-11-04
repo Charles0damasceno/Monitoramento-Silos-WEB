@@ -33,21 +33,81 @@ Ele lê o nível que a IHM Weintek grava no MySQL (só leitura), mostra cada sil
 
 Todas as telas recebem a mesma leitura: com 1 ou 20 navegadores abertos, o banco da IHM recebe **uma** consulta por intervalo.
 
-## Instalação (Windows)
+## Instalação
 
-Pré-requisito: **Node.js 22 LTS** (22.13 ou mais novo) — https://nodejs.org/
+### 1. Gerar os pacotes (no computador de desenvolvimento)
 
-1. Copie a pasta do projeto para o computador servidor (ex.: `C:\PainelSilos`).
-2. Abra o **PowerShell como administrador** nessa pasta e rode:
-   ```powershell
-   powershell -ExecutionPolicy Bypass -File .\instalar.ps1
-   ```
-3. Na primeira vez ele cria o `.env` e abre o Bloco de Notas: preencha `DB_USER` e `DB_PASSWORD` do MySQL da IHM, salve e rode o instalador de novo.
-4. O instalador compila o site, roda os testes, pede o primeiro usuário, libera a porta no firewall e instala o **serviço "Painel de Silos"**, que inicia junto com o Windows e reinicia sozinho se cair.
+```
+npm run pacote
+```
 
-Acesse `http://<ip-do-servidor>:12322`.
+Cria em `dist-pacote/`:
 
-> **Usuário do MySQL:** use um usuário com permissão **somente de SELECT** na tabela `silo`. O painel não precisa (e não deve) poder gravar no banco da IHM.
+| Arquivo | Para |
+|---|---|
+| `painel-silos-<versão>-windows.zip` | Windows 10/11 e Windows Server 2016+ |
+| `painel-silos-<versão>-linux.tar.gz` | Debian/Ubuntu, RHEL/Rocky/Alma, Arch (com systemd) |
+
+Os pacotes já trazem o site compilado e **nunca** incluem `.env`, dados, usuários ou logs.
+
+### 2. Antes de instalar: usuário somente leitura no MySQL
+
+O painel só precisa **ler** o banco da IHM. Peça ao responsável pelo banco para rodar [docs/mysql-usuario-somente-leitura.sql](docs/mysql-usuario-somente-leitura.sql) — ele cria o usuário `painel_silos` com permissão apenas de `SELECT`. Use esse usuário na instalação.
+
+### 3a. Windows
+
+Pré-requisito: **Node.js 22 LTS** (o instalador oferece instalar pelo `winget` se faltar).
+
+1. Extraia o `.zip` em `C:\PainelSilos` (evite Downloads/Área de Trabalho).
+2. Dois cliques em **`instalar.bat`** e aceite a permissão de administrador.
+3. Responda: IP, porta, banco, tabela, usuário e senha do MySQL, porta do painel e o usuário administrador.
+
+O instalador instala as dependências, grava o `.env` (acesso restrito a administradores), cria o administrador, roda o **diagnóstico**, libera a porta no firewall (redes privada/domínio), instala o **serviço "Painel de Silos"** (inicia com o Windows, reinicia se cair) e cria o atalho na área de trabalho.
+
+Desinstalar: `desinstalar.bat` (mantém dados; `-ApagarDados` apaga tudo).
+
+### 3b. Linux
+
+Pré-requisito: **Node.js 22 LTS** e `npm` (o instalador mostra o comando para a sua distribuição se faltar).
+
+```bash
+tar -xzf painel-silos-<versão>-linux.tar.gz
+cd painel-silos-<versão>
+sudo bash instalar.sh
+```
+
+Instala em `/opt/painel-silos`, cria o usuário de sistema `painel-silos` (sem login) e o serviço systemd **`painel-silos`** com proteções (`ProtectSystem=strict`, só escreve em `data/`, `logs/` e `config/`). Abre a porta no `ufw`/`firewalld` se estiver ativo.
+
+```bash
+systemctl status painel-silos      # situação
+journalctl -u painel-silos -f      # log ao vivo
+sudo bash /opt/painel-silos/desinstalar.sh
+```
+
+Opções: `--destino DIR`, `--usuario NOME`, `--sem-servico`, `--sem-firewall`, `--nao-interativo`.
+
+### Atualizar para uma versão nova
+
+Gere o pacote novo e rode o instalador de novo (Windows: extraia por cima da pasta; Linux: `sudo bash instalar.sh` da pasta nova). **Dados, usuários, `.env` e o cadastro de silos feito pela tela são preservados** — os pacotes trazem o cadastro como `config/*.padrao.json`, usado só quando ainda não existe um.
+
+### Instalação automatizada (sem perguntas)
+
+Ambos os instaladores aceitam `-NaoInterativo` / `--nao-interativo` e leem os valores de variáveis `CFG_<CHAVE>` (mesmas chaves do `.env`) e `PAINEL_SENHA` (senha do primeiro administrador):
+
+```bash
+sudo CFG_DB_HOST=10.5.0.111 CFG_DB_USER=painel_silos CFG_DB_PASSWORD='...' PAINEL_SENHA='...' \
+  bash instalar.sh --nao-interativo
+```
+
+### Diagnóstico
+
+A qualquer momento, na pasta do painel:
+
+```
+npm run diagnostico
+```
+
+Confere Node.js, `.env`, conexão com o banco, **se o usuário do banco é somente leitura**, se a tabela e as colunas de cada silo existem, os valores atuais (alerta se fora da capacidade ou todos zerados), a tabela de temperatura, porta, usuários, pastas graváveis e o Telegram. Sai com erro se algo impede o funcionamento.
 
 ## Uso do dia a dia
 
@@ -57,6 +117,8 @@ Acesse `http://<ip-do-servidor>:12322`.
 | Criar operador | `npm run usuario -- adicionar maria --nome "Maria Souza"` |
 | Criar administrador | `npm run usuario -- adicionar joao --admin` |
 | Trocar senha | `npm run usuario -- senha maria` (encerra as sessões abertas) |
+| Tornar administrador | `npm run usuario -- papel maria admin` |
+| Conferir a instalação | `npm run diagnostico` |
 | Remover usuário | `npm run usuario -- remover maria` |
 | Reiniciar o serviço | `npm run servico -- reiniciar` (como administrador) |
 | Remover o serviço | `npm run servico -- remover` (como administrador) |
@@ -115,6 +177,8 @@ Cada silo é lido de forma independente: se a coluna cadastrada não existir (ou
 | Muito baixo | ≤ 5 % | crítico |
 
 Para sair de um alarme o nível precisa recuar **2 pontos** além do limite (histerese), evitando alarmes repetidos quando o nível oscila em cima da linha.
+
+**Silo vazio:** até 0,5 % da capacidade o silo aparece como **Vazio** (informativo, sem alarme). Ao encher a partir do vazio ele fica **Enchendo** até passar do limite baixo, sem disparar alarme de nível baixo. Os alarmes *Baixo/Muito baixo* valem quando o nível **desce** a partir do normal — a situação de risco (bomba puxando ar). Ajuste em `SILO_VAZIO_PCT` (0 = alarmes de nível baixo sempre).
 
 ### Alertas no celular (Telegram)
 

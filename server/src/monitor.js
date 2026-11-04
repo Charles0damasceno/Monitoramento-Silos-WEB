@@ -14,6 +14,8 @@ const MOTIVO = {
 };
 
 const ROTULO = {
+  [ESTADOS.VAZIO]: 'vazio',
+  [ESTADOS.ENCHENDO]: 'começou a encher',
   [ESTADOS.MUITO_BAIXO]: 'nível MUITO BAIXO',
   [ESTADOS.BAIXO]: 'nível baixo',
   [ESTADOS.NORMAL]: 'nível normal',
@@ -138,7 +140,7 @@ function criarMonitor({ config, fonte, armazenamento, log, agora = Date.now }) {
       st.janela.push({ ts, litros });
       while (st.janela.length && st.janela[0].ts < ts - JANELA_VAZAO_MS) st.janela.shift();
 
-      const novo = classificar(percentual(litros, s.capacidadeLitros), s.limites, st.estado);
+      const novo = classificar(percentual(litros, s.capacidadeLitros), s.limites, st.estado, undefined, config.vazioPct ?? 0);
       if (novo !== st.estado) {
         const pct = percentual(litros, s.capacidadeLitros).toFixed(1).replace('.', ',');
         registrar({

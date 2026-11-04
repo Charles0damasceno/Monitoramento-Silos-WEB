@@ -36,6 +36,8 @@ export function duracao(horas) {
 }
 
 export const ROTULO_ESTADO = {
+  vazio: 'Vazio',
+  enchendo: 'Enchendo',
   muito_baixo: 'Muito baixo',
   baixo: 'Baixo',
   normal: 'Normal',

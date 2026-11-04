@@ -97,8 +97,10 @@ function criarNotificador({ config, monitor, armazenamento, cliente, log, agora 
       if (repetirMs > 0 && e.id) pendentes.set(e.id, { chave, evento: e, ultimoEnvio: agora() });
       enfileirar({ texto: textoAlarme(e), botoes: botoes(e), eventoId: e.id });
     } else if (!e.severidade && chavesEmAlarme.delete(chave)) {
-      const icone = e.tipo === 'comunicacao' ? '🟢' : '✅';
-      enfileirar({ texto: `${icone} <b>Normalizado</b>\n${esc(e.mensagem)}\n<i>${fmtDataHora.format(e.ts)}</i>` });
+      // Alarme de nível baixo que terminou com o silo vazio: aviso neutro, não "normalizado".
+      const [icone, titulo] = e.estado === 'vazio' ? ['⚪', 'Silo esvaziado']
+        : e.tipo === 'comunicacao' ? ['🟢', 'Normalizado'] : ['✅', 'Normalizado'];
+      enfileirar({ texto: `${icone} <b>${titulo}</b>\n${esc(e.mensagem)}\n<i>${fmtDataHora.format(e.ts)}</i>` });
     }
   }
 
