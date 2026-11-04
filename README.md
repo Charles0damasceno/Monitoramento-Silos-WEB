@@ -311,3 +311,5 @@ instalar.ps1               instalador do Windows
 - A porta é liberada no firewall apenas para redes **privada/domínio**. Para acesso de fora da fábrica, use VPN — não abra a porta no roteador.
 
 Veja o [CHANGELOG](CHANGELOG.md) para o histórico de versões.
+#   M o n i t o r a m e n t o - S i l o s - W E B  
+ 
