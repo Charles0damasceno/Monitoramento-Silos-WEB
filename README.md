@@ -312,4 +312,6 @@ instalar.ps1               instalador do Windows
 
 Veja o [CHANGELOG](CHANGELOG.md) para o histórico de versões.
 #   M o n i t o r a m e n t o - S i l o s - W E B  
+ #   M o n i t o r a m e n t o - S i l o s - W E B  
+ #   M o n i t o r a m e n t o - S i l o s - W E B  
  
